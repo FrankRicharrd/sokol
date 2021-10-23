@@ -2294,6 +2294,7 @@ SOKOL_GFX_API_DECL bool sg_query_buffer_overflow(sg_buffer buf);
 SOKOL_GFX_API_DECL void sg_begin_default_pass(const sg_pass_action* pass_action, int width, int height);
 SOKOL_GFX_API_DECL void sg_begin_default_passf(const sg_pass_action* pass_action, float width, float height);
 SOKOL_GFX_API_DECL void sg_begin_pass(sg_pass pass, const sg_pass_action* pass_action);
+SOKOL_GFX_API_DECL void sg_readPixel(int x, int y, int width, int height, sg_pixel_format format, void* data);
 SOKOL_GFX_API_DECL void sg_apply_viewport(int x, int y, int width, int height, bool origin_top_left);
 SOKOL_GFX_API_DECL void sg_apply_viewportf(float x, float y, float width, float height, bool origin_top_left);
 SOKOL_GFX_API_DECL void sg_apply_scissor_rect(int x, int y, int width, int height, bool origin_top_left);
@@ -4753,7 +4754,8 @@ _SOKOL_PRIVATE void _sg_dummy_update_image(_sg_image_t* img, const sg_image_data
     _SG_XMACRO(glTexImage2D,                      void, (GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const void * pixels)) \
     _SG_XMACRO(glGenVertexArrays,                 void, (GLsizei n, GLuint * arrays)) \
     _SG_XMACRO(glFrontFace,                       void, (GLenum mode)) \
-    _SG_XMACRO(glCullFace,                        void, (GLenum mode))
+    _SG_XMACRO(glCullFace,                        void, (GLenum mode))\
+    _SG_XMACRO(glReadPixels,                      void, (GLint x, GLint y,GLsizei width, GLsizei height, GLenum format,GLenum type, void* data))
 
 // generate GL function pointer typedefs
 #define _SG_XMACRO(name, ret, args) typedef ret (GL_APIENTRY* PFN_ ## name) args;
@@ -6979,6 +6981,16 @@ _SOKOL_PRIVATE void _sg_gl_end_pass(void) {
     SOKOL_ASSERT(_sg.gl.cur_context);
     glBindFramebuffer(GL_FRAMEBUFFER, _sg.gl.cur_context->default_framebuffer);
     _sg.gl.in_pass = false;
+    _SG_GL_CHECK_ERROR();
+}
+
+_SOKOL_PRIVATE void _sg_gl_readPixels(int x, int y, int w, int h, sg_pixel_format format, void* data) {
+    SOKOL_ASSERT(_sg.gl.in_pass);
+
+    glReadPixels(x, y, w, h, _sg_gl_teximage_format(format), _sg_gl_teximage_type(format), data);
+    //glReadPixels(x, y, w, h, GL_RGBA, GL_UNSIGNED_BYTE, data);
+
+    //GLenum err =  glGetError();
     _SG_GL_CHECK_ERROR();
 }
 
@@ -13020,6 +13032,25 @@ static inline void _sg_end_pass(void) {
     #endif
 }
 
+static inline void _sg_readPixel(int x, int y, int w, int h, sg_pixel_format format, void* data) {
+#if defined(_SOKOL_ANY_GL)
+
+    _sg_gl_readPixels(x, y, w, h, format, data);
+
+//#elif defined(SOKOL_METAL)
+//    _sg_mtl_apply_viewport(x, y, w, h, origin_top_left);
+//#elif defined(SOKOL_D3D11)
+//    _sg_d3d11_apply_viewport(x, y, w, h, origin_top_left);
+//#elif defined(SOKOL_WGPU)
+//    _sg_wgpu_apply_viewport(x, y, w, h, origin_top_left);
+//#elif defined(SOKOL_DUMMY_BACKEND)
+//    _sg_dummy_apply_viewport(x, y, w, h, origin_top_left);
+#else
+#error("INVALID BACKEND");
+#endif
+}
+
+
 static inline void _sg_apply_viewport(int x, int y, int w, int h, bool origin_top_left) {
     #if defined(_SOKOL_ANY_GL)
     _sg_gl_apply_viewport(x, y, w, h, origin_top_left);
@@ -15233,6 +15264,16 @@ SOKOL_API_IMPL void sg_begin_pass(sg_pass pass_id, const sg_pass_action* pass_ac
         _sg.pass_valid = false;
         _SG_TRACE_NOARGS(err_pass_invalid);
     }
+}
+
+SOKOL_API_IMPL void sg_readPixel(int x, int y, int width, int height, sg_pixel_format format, void* data) {
+    SOKOL_ASSERT(_sg.valid);
+    if (!_sg.pass_valid) {
+        _SG_TRACE_NOARGS(err_pass_invalid);
+        return;
+    }
+    _sg_readPixel(x, y, width, height, format, data);
+   // _SG_TRACE_ARGS(readPixel, x, y, width, height, origin_top_left);
 }
 
 SOKOL_API_IMPL void sg_apply_viewport(int x, int y, int width, int height, bool origin_top_left) {
