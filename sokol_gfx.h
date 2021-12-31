@@ -2294,7 +2294,7 @@ SOKOL_GFX_API_DECL bool sg_query_buffer_overflow(sg_buffer buf);
 SOKOL_GFX_API_DECL void sg_begin_default_pass(const sg_pass_action* pass_action, int width, int height);
 SOKOL_GFX_API_DECL void sg_begin_default_passf(const sg_pass_action* pass_action, float width, float height);
 SOKOL_GFX_API_DECL void sg_begin_pass(sg_pass pass, const sg_pass_action* pass_action);
-SOKOL_GFX_API_DECL void sg_readPixel(int x, int y, int width, int height, sg_pixel_format format, void* data);
+SOKOL_GFX_API_DECL bool sg_readPixel(int x, int y, int width, int height, sg_pixel_format format, void* data);
 SOKOL_GFX_API_DECL void sg_apply_viewport(int x, int y, int width, int height, bool origin_top_left);
 SOKOL_GFX_API_DECL void sg_apply_viewportf(float x, float y, float width, float height, bool origin_top_left);
 SOKOL_GFX_API_DECL void sg_apply_scissor_rect(int x, int y, int width, int height, bool origin_top_left);
@@ -13032,11 +13032,11 @@ static inline void _sg_end_pass(void) {
     #endif
 }
 
-static inline void _sg_readPixel(int x, int y, int w, int h, sg_pixel_format format, void* data) {
+static inline bool _sg_readPixel(int x, int y, int w, int h, sg_pixel_format format, void* data) {
 #if defined(_SOKOL_ANY_GL)
 
     _sg_gl_readPixels(x, y, w, h, format, data);
-
+    return true;
 //#elif defined(SOKOL_METAL)
 //    _sg_mtl_apply_viewport(x, y, w, h, origin_top_left);
 //#elif defined(SOKOL_D3D11)
@@ -13046,7 +13046,9 @@ static inline void _sg_readPixel(int x, int y, int w, int h, sg_pixel_format for
 //#elif defined(SOKOL_DUMMY_BACKEND)
 //    _sg_dummy_apply_viewport(x, y, w, h, origin_top_left);
 #else
-#error("INVALID BACKEND");
+    
+    return false;
+//#error("INVALID BACKEND");
 #endif
 }
 
@@ -15266,13 +15268,13 @@ SOKOL_API_IMPL void sg_begin_pass(sg_pass pass_id, const sg_pass_action* pass_ac
     }
 }
 
-SOKOL_API_IMPL void sg_readPixel(int x, int y, int width, int height, sg_pixel_format format, void* data) {
+SOKOL_API_IMPL bool sg_readPixel(int x, int y, int width, int height, sg_pixel_format format, void* data) {
     SOKOL_ASSERT(_sg.valid);
     if (!_sg.pass_valid) {
         _SG_TRACE_NOARGS(err_pass_invalid);
-        return;
+        return false;
     }
-    _sg_readPixel(x, y, width, height, format, data);
+    return _sg_readPixel(x, y, width, height, format, data);
    // _SG_TRACE_ARGS(readPixel, x, y, width, height, origin_top_left);
 }
 
