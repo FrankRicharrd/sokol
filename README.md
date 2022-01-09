@@ -6,7 +6,7 @@ Simple
 [STB-style](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
 cross-platform libraries for C and C++, written in C.
 
-[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**02-Sep-2021** sokol_app.h: new FOCUSED/UNFOCUSED event and better keycode handling in the Emscripten backend)
+[**See what's new**](https://github.com/floooh/sokol/blob/master/CHANGELOG.md) (**07-Jan-2022** sokol_gfx.h: uniform data cleanup and enhancements)
 
 ## Examples and Related Projects
 
@@ -14,9 +14,13 @@ cross-platform libraries for C and C++, written in C.
 
 - [Doom Shareware](https://floooh.github.io/doom-sokol/) ported to the Sokol headers ([source](https://github.com/floooh/doom-sokol))
 
+- [sokol_gp.h](https://github.com/edubart/sokol_gp) a 2D shape drawing library on top of sokol_gfx.h
+
 - [LearnOpenGL examples ported to sokol-gfx](https://www.geertarien.com/learnopengl-examples-html5/) by @geertarien (cool stuff!)
 
 - [Dear ImGui starterkit](https://github.com/floooh/cimgui-sokol-starterkit) a self-contained starterkit for writing Dear ImGui apps in C.
+
+- [qoiview](https://github.com/floooh/qoiview) a basic viewer for the new QOI image file format
 
 - [Tiny 8-bit emulators](https://floooh.github.io/tiny8bit/)
 

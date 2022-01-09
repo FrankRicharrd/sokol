@@ -1,5 +1,99 @@
 ## Updates
 
+- **08-Jan-2022**: some enhancements and cleanup to uniform data handling in sokol_gfx.h
+  and the sokol-shdc shader compiler:
+    - *IMPORTANT*: when updating sokol_gfx.h (and you're using the sokol-shdc shader compiler),
+      don't forget to update the sokol-shdc binaries too!
+    - The GLSL uniform types int, ivec2, ivec3 and
+      ivec4 can now be used in shader code, those are exposed to the GL
+      backends with the new ```sg_uniform_type``` items
+      ```SG_UNIFORM_TYPE_INT[2,3,4]```.
+    - A new enum ```sg_uniform_layout```, currently with the values SG_UNIFORMLAYOUT_NATIVE
+      and SG_UNIFORMLAYOUT_STD140. The enum is used in ```sg_shader_uniform_block_desc```
+      as a 'packing rule hint', so that the GL backend can properly locate the offset
+      of uniform block members. The default (SG_UNIFORMLAYOUT_NATIVE) keeps the same
+      behaviour, so existing code shouldn't need to be changed. With the packing
+      rule SG_UNIFORMLAYOUT_STD140 the uniform block interior is expected to be
+      layed out according to the OpenGL std140 packing rule.
+    - Note that the SG_UNIFORMLAYOUT_STD140 only allows a subset of the actual std140
+      packing rule: arrays are only allowed for the types vec4, int4 and mat4.
+      This is because the uniform data must still be compatible with
+      ```glUniform()``` calls in the GL backends (which have different
+      'interior alignment' for arrays).
+    - The sokol-shdc compiler supports the new uniform types and will annotate the 
+      code-generated sg_shader_desc structs with SG_UNIFORMLAYOUT_STD140,
+      and there are new errors to make sure that uniform blocks are compatible
+      with all sokol_gfx.h backends.
+    - Likewise, sokol_gfx.h has tighter validation for the ```sg_shader_uniform_block```
+      desc struct, but only when the GL backend is used (in general, the interior
+      layout of uniform blocks is only relevant for GL backends, on all other backends
+      sokol_gfx.h just passes the uniform data as an opaque block to the shader)
+  For more details see:
+    - [new sections in the sokol_gfx.h documentation](https://github.com/floooh/sokol/blob/ba64add0b67cac16fc86fb6b64d1da5f67e80c0f/sokol_gfx.h#L343-L450)
+    - [documentation of ```sg_uniform_layout```](https://github.com/floooh/sokol/blob/ba64add0b67cac16fc86fb6b64d1da5f67e80c0f/sokol_gfx.h#L1322-L1355)
+    - [enhanced sokol-shdc documentation](https://github.com/floooh/sokol-tools/blob/master/docs/sokol-shdc.md#glsl-uniform-blocks-and-c-structs)
+    - [a new sample 'uniformtypes-sapp'](https://floooh.github.io/sokol-html5/uniformtypes-sapp.html)
+  
+  PS: and an unrelated change: the frame latency on Win32+D3D11 has been slightly improved
+  via IDXGIDevice1::SetMaximumFrameLatency()
+
+- **27-Dec-2021**: sokol_app.h frame timing improvements:
+  - A new function ```double sapp_frame_duration(void)``` which returns the frame
+    duration in seconds, averaged over the last 256 frames to smooth out
+    jittering spikes. If available, this uses platform/backend specific
+    functions of the swapchain API:
+      - On Windows: DXGI's GetFrameStatistics().SyncQPCTime.
+      - On Emscripten: the timestamp provided by the RAF callback, this will
+        still be clamped and jittered on some browsers, but averaged over
+        a number of frames yields a pretty accurate approximation
+        of the actual frame duration.
+      - On Metal, ```MTLDrawable addPresentedHandler + presentedTime```
+        doesn't appear to function correctly on macOS Monterey and/or M1 Macs, so 
+        instead mach_absolute_time() is called at the start of the MTKView
+        frame callback.
+      - In all other situations, the same timing method is used as
+        in sokol_time.h.
+  - On macOS and iOS, sokol_app.h now queries the maximum display refresh rate
+    of the main display and uses this as base to compute the preferred frame
+    rate (by multiplying with ```sapp_desc.swap_interval```), previously the
+    preferred frame rate was hardwired to ```60 * swap_interval```. This means
+    that native macOS and iOS applications may now run at 120Hz instead of
+    60Hz depending on the device (I realize that this isn't ideal, there
+    will probably be a different way to hint the preferred interval at
+    which the frame callback is called, which would also support disabling
+    vsync and probably also adaptive vsync).
+
+- **19-Dec-2021**: some sokol_audio.h changes:
+  - on Windows, sokol_audio.h no longer converts audio samples
+    from float to int16_t, but instead configures WASAPI to directly accept
+    float samples. Many thanks to github user iOrange for the PR!
+  - sokol_audio.h has a new public function ```saudio_suspended()``` which
+    returns true if the audio device/context is currently in suspended mode.
+    On all backends except WebAudio this always returns false. This allows
+    to show a visual hint to the user that audio is muted until the first
+    input event is received.
+
+- **18-Dec-2021**: the sokol_gfx.h ```sg_draw()``` function now uses the currently applied
+  pipeline object to decide if the GL or D3D11 backend's instanced drawing function
+  should be called instead of the ```num_instances``` argument. This fixes a
+  bug on some WebGL configs when when instanced rendering is configured
+  but ```sg_draw()``` is called with and instance count of 1.
+
+- **18-Nov-2021**: sokol_gl.h has a new function to control the point size for
+  point list rendering: ```void sgl_point_size(float size)```. Note that on D3D11
+  the point size is currently ignored (since D3D11 doesn't support a point size at
+  all, the feature will need to be emulated in sokol_gl.h when the D3D11 backend is active).
+  Also note that points cannot currently be textured, only colored.
+
+- **08-Oct-2021**: texture compression support in sokol_gfx.h has been revisited:
+    - tighter validation checks on texture creation:
+        - content data validation now also happens in ```sg_make_image()``` (previously only in ```sg_update_image()```)
+        - validate that compressed textures are immutable
+        - separate "no data" validation checks for immutable vs dynamic/stream textures
+        - provided data size for creating or updating textures must match the expected surface sizes exactly
+    - fix PVRTC row and surface pitch computation according to the GL PVRTC extension spec
+    - better adhere to Metal documentation for the ```MTLTexture.replaceRegion``` parameters (when bytesPerImage is expected to be zero or not)
+
 - **02-Sep-2021**: some minor non-breaking additions:
     - sokol_app.h: new events FOCUSED and UNFOCUSED to indicate that the
       window has gained or lost the focused state (Win32: WM_SETFOCUS/WM_KILLFOCUS,
