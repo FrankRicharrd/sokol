@@ -3336,6 +3336,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         _sapp.macos.mtl_device = MTLCreateSystemDefaultDevice();
         _sapp.macos.view = [[_sapp_macos_view alloc] init];
         [_sapp.macos.view updateTrackingAreas];
+        _sapp.macos.view.framebufferOnly = NO;
         _sapp.macos.view.preferredFramesPerSecond = max_fps / _sapp.swap_interval;
         _sapp.macos.view.device = _sapp.macos.mtl_device;
         _sapp.macos.view.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
