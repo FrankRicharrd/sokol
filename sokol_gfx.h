@@ -2444,7 +2444,7 @@ SOKOL_GFX_API_DECL bool sg_query_buffer_overflow(sg_buffer buf);
 SOKOL_GFX_API_DECL void sg_begin_default_pass(const sg_pass_action* pass_action, int width, int height);
 SOKOL_GFX_API_DECL void sg_begin_default_passf(const sg_pass_action* pass_action, float width, float height);
 SOKOL_GFX_API_DECL void sg_begin_pass(sg_pass pass, const sg_pass_action* pass_action);
-SOKOL_GFX_API_DECL bool sg_readPixel(int x, int y, int width, int height, sg_pixel_format format, void* data);
+SOKOL_GFX_API_DECL bool sg_readPixel(sg_image img, int x, int y, int width, int height, sg_pixel_format format, void* data);
 SOKOL_GFX_API_DECL void sg_apply_viewport(int x, int y, int width, int height, bool origin_top_left);
 SOKOL_GFX_API_DECL void sg_apply_viewportf(float x, float y, float width, float height, bool origin_top_left);
 SOKOL_GFX_API_DECL void sg_apply_scissor_rect(int x, int y, int width, int height, bool origin_top_left);
@@ -7227,7 +7227,7 @@ _SOKOL_PRIVATE void _sg_gl_end_pass(void) {
     _SG_GL_CHECK_ERROR();
 }
 
-_SOKOL_PRIVATE void _sg_gl_readPixels(int x, int y, int w, int h, sg_pixel_format format, void* data) {
+_SOKOL_PRIVATE void _sg_gl_readPixels(_sg_image_t* img, int x, int y, int w, int h, sg_pixel_format format, void* data) {
     SOKOL_ASSERT(_sg.gl.in_pass);
 
     glReadPixels(x, y, w, h, _sg_gl_teximage_format(format), _sg_gl_teximage_type(format), data);
@@ -11087,6 +11087,105 @@ _SOKOL_PRIVATE void _sg_mtl_apply_viewport(int x, int y, int w, int h, bool orig
     [_sg.mtl.cmd_encoder setViewport:vp];
 }
 
+
+_SOKOL_PRIVATE bool _sg_mtl_readPixels(_sg_image_t* img, int x, int y, int w, int h, sg_pixel_format format, void* data) {
+
+    id<MTLTexture> texture = _sg_mtl_id(img->mtl.tex[img->cmn.active_slot]);
+   
+    if (nil == _sg.mtl.cmd_buffer) {
+        return false;
+    }
+    if (nil == texture) {
+        return false;
+    }
+    
+    
+    id<MTLCommandBuffer> commandBuffer = _sg.mtl.cmd_buffer;
+    MTLOrigin origin = MTLOriginMake(x,y, 0);
+    MTLSize size = MTLSizeMake(w, h, 1);
+
+     id<MTLBuffer> _readBuffer = nil;
+    MTLPixelFormat pixelFormat = texture.pixelFormat;
+    NSUInteger bytesPerPixel =0;
+    switch (pixelFormat)
+    {
+        case MTLPixelFormatRGBA32Float:
+            bytesPerPixel = 4*4;
+            break;
+        case MTLPixelFormatBGRA8Unorm:
+            bytesPerPixel = 4;
+            break;
+        case MTLPixelFormatR32Uint:
+            bytesPerPixel = 4;
+            break;
+        default:
+            SOKOL_ASSERT(0);//, @"Unsupported pixel format: 0x%X.", (uint32_t)pixelFormat);
+    }
+
+    // Check for attempts to read pixels outside the texture.
+    // In this sample, the calling code validates the region, so just assert.
+    SOKOL_ASSERT(origin.x >= 0);//, @"Reading outside the left texture bounds.");
+    SOKOL_ASSERT(origin.y >= 0);//, @"Reading outside the top texture bounds.");
+    SOKOL_ASSERT((origin.x + size.width)  <= texture.width);//,  @"Reading outside the right texture bounds.");
+    SOKOL_ASSERT((origin.y + size.height) <= texture.height);//, @"Reading outside the bottom texture bounds.");
+
+    SOKOL_ASSERT(!((size.width == 0) || (size.height == 0)));//, @"Reading zero-sized area: %dx%d.", (uint32_t)size.width, (uint32_t)size.height);
+
+    NSUInteger bytesPerRow   = size.width * bytesPerPixel;
+    NSUInteger bytesPerImage = size.height * bytesPerRow;
+
+    _readBuffer = [texture.device newBufferWithLength:bytesPerImage options:MTLResourceStorageModeShared];
+
+    if(nil == _readBuffer)
+    {
+        return false;
+    }
+    SOKOL_ASSERT(_readBuffer);// @"Failed to create buffer for %zu bytes.", bytesPerImage);
+
+    if (nil != _sg.mtl.cmd_encoder) {
+        [_sg.mtl.cmd_encoder endEncoding];
+        /* NOTE: MTLRenderCommandEncoder is autoreleased */
+        _sg.mtl.cmd_encoder = nil;
+    }
+    
+    // Copy the pixel data of the selected region to a Metal buffer with a shared
+    // storage mode, which makes the buffer accessible to the CPU.
+    id <MTLBlitCommandEncoder> blitEncoder = [commandBuffer blitCommandEncoder];
+
+    [blitEncoder copyFromTexture:texture
+                     sourceSlice:0
+                     sourceLevel:0
+                    sourceOrigin:origin
+                      sourceSize:size
+                        toBuffer:_readBuffer
+               destinationOffset:0
+          destinationBytesPerRow:bytesPerRow
+        destinationBytesPerImage:bytesPerImage];
+
+    [blitEncoder endEncoding];
+
+    [commandBuffer commit];
+    
+    // The app must wait for the GPU to complete the blit pass before it can
+    // read data from _readBuffer.
+    [commandBuffer waitUntilCompleted];
+    
+    //command buffer will be auto released and created again in the next frame
+    _sg.mtl.cmd_buffer = nil;
+
+    // Calling waitUntilCompleted blocks the CPU thread until the blit operation
+    // completes on the GPU. This is generally undesirable as apps should maximize
+    // parallelization between CPU and GPU execution. Instead of blocking here, you
+    // could process the pixels in a completion handler using:
+    //      [commandBuffer addCompletedHandler:...];
+
+    memcpy(data,_readBuffer.contents , bytesPerImage);
+
+    
+    return true;
+}
+
+
 _SOKOL_PRIVATE void _sg_mtl_apply_scissor_rect(int x, int y, int w, int h, bool origin_top_left) {
     SOKOL_ASSERT(_sg.mtl.in_pass);
     if (!_sg.mtl.pass_valid) {
@@ -13349,13 +13448,13 @@ static inline void _sg_end_pass(void) {
     #endif
 }
 
-static inline bool _sg_readPixel(int x, int y, int w, int h, sg_pixel_format format, void* data) {
+static inline bool _sg_readPixel(_sg_image_t* imgIn, int x, int y, int w, int h, sg_pixel_format format, void* data) {
 #if defined(_SOKOL_ANY_GL)
 
-    _sg_gl_readPixels(x, y, w, h, format, data);
+    _sg_gl_readPixels(imgIn, x, y, w, h, format, data);
     return true;
-//#elif defined(SOKOL_METAL)
-//    _sg_mtl_apply_viewport(x, y, w, h, origin_top_left);
+#elif defined(SOKOL_METAL)
+    return _sg_mtl_readPixels(imgIn, x, y, w, h, format, data);
 //#elif defined(SOKOL_D3D11)
 //    _sg_d3d11_apply_viewport(x, y, w, h, origin_top_left);
 //#elif defined(SOKOL_WGPU)
@@ -13365,7 +13464,7 @@ static inline bool _sg_readPixel(int x, int y, int w, int h, sg_pixel_format for
 #else
     
     return false;
-//#error("INVALID BACKEND");
+#error("INVALID BACKEND");
 #endif
 }
 
@@ -15632,13 +15731,16 @@ SOKOL_API_IMPL void sg_begin_pass(sg_pass pass_id, const sg_pass_action* pass_ac
     }
 }
 
-SOKOL_API_IMPL bool sg_readPixel(int x, int y, int width, int height, sg_pixel_format format, void* data) {
+SOKOL_API_IMPL bool sg_readPixel(sg_image imgIn, int x, int y, int width, int height, sg_pixel_format format, void* data) {
     SOKOL_ASSERT(_sg.valid);
-    if (!_sg.pass_valid) {
-        _SG_TRACE_NOARGS(err_pass_invalid);
-        return false;
-    }
-    return _sg_readPixel(x, y, width, height, format, data);
+//    if (!_sg.pass_valid) {
+//        _SG_TRACE_NOARGS(err_pass_invalid);
+//        return false;
+//    }
+    
+    _sg_image_t* img = _sg_lookup_image(&_sg.pools, imgIn.id);
+    
+    return _sg_readPixel(img, x, y, width, height, format, data);
    // _SG_TRACE_ARGS(readPixel, x, y, width, height, origin_top_left);
 }
 
