@@ -4993,7 +4993,6 @@ _SOKOL_PRIVATE void _sg_dummy_update_image(_sg_image_t* img, const sg_image_data
     _SG_XMACRO(glGenVertexArrays,                 void, (GLsizei n, GLuint * arrays)) \
     _SG_XMACRO(glFrontFace,                       void, (GLenum mode)) \
     _SG_XMACRO(glCullFace,                        void, (GLenum mode))\
-    _SG_XMACRO(glReadPixels,                      void, (GLint x, GLint y,GLsizei width, GLsizei height, GLenum format,GLenum type, void* data))
 
 // generate GL function pointer typedefs
 #define _SG_XMACRO(name, ret, args) typedef ret (GL_APIENTRY* PFN_ ## name) args;
