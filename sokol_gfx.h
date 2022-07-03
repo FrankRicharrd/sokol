@@ -7226,7 +7226,7 @@ _SOKOL_PRIVATE void _sg_gl_end_pass(void) {
     _SG_GL_CHECK_ERROR();
 }
 
-_SOKOL_PRIVATE void _sg_gl_readPixels(_sg_image_t* img, int x, int y, int w, int h, sg_pixel_format format, void* data) {
+_SOKOL_PRIVATE void _sg_gl_readPixels(int x, int y, int w, int h, sg_pixel_format format, void* data) {
     SOKOL_ASSERT(_sg.gl.in_pass);
 
     glReadPixels(x, y, w, h, _sg_gl_teximage_format(format), _sg_gl_teximage_type(format), data);
@@ -13449,8 +13449,8 @@ static inline void _sg_end_pass(void) {
 
 static inline bool _sg_readPixel(_sg_image_t* imgIn, int x, int y, int w, int h, sg_pixel_format format, void* data) {
 #if defined(_SOKOL_ANY_GL)
-
-    _sg_gl_readPixels(imgIn, x, y, w, h, format, data);
+auto i = imgIn;
+    _sg_gl_readPixels(x, y, w, h, format, data);
     return true;
 #elif defined(SOKOL_METAL)
     return _sg_mtl_readPixels(imgIn, x, y, w, h, format, data);
